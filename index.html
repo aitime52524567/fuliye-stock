@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>A股周期分析 · 傅里叶变换套利周期</title>
+
+<!-- PWA / 移动端 App 化 -->
+<meta name="theme-color" content="#0d1117" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="A股周期" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1>📈 A股股票价格周期分析</h1>
+      <p class="sub">支持<strong>代码 / 中文名 / 拼音首字母</strong>搜索（覆盖沪深主板、创业板、科创板），自动拉取近一年日线，用<strong>傅里叶变换（FFT）</strong>找出最有规律的套利周期</p>
+    </header>
+
+    <!-- 输入区 -->
+    <section class="panel input-panel">
+      <div class="input-row">
+        <label class="field field-search">
+          <span>股票查询（代码 / 中文名 / 拼音首字母）</span>
+          <div class="search-wrap">
+            <input id="codeInput" type="text" autocomplete="off"
+                   placeholder="如 600519 / 茅台 / gzmt / ndsd" value="600519" />
+            <div id="suggestList" class="suggest-list"></div>
+          </div>
+        </label>
+        <label class="field">
+          <span>市场</span>
+          <select id="marketSelect">
+            <option value="auto">自动判断</option>
+            <option value="1">沪市 (SH)</option>
+            <option value="0">深市 (SZ)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>数据范围</span>
+          <select id="rangeSelect">
+            <option value="60">近3个月</option>
+            <option value="120">近半年</option>
+            <option value="250" selected>近1年</option>
+            <option value="500">近2年</option>
+          </select>
+        </label>
+        <button id="analyzeBtn" class="btn-primary">开始分析</button>
+      </div>
+      <div class="quick-tags">
+        <span class="tag-label">快速示例：</span>
+        <button class="tag" data-code="600519">贵州茅台 · 沪主板</button>
+        <button class="tag" data-code="300750">宁德时代 · 创业板</button>
+        <button class="tag" data-code="688981">中芯国际 · 科创板</button>
+        <button class="tag" data-code="000001">平安银行 · 深主板</button>
+        <button class="tag" data-code="688111">金山办公 · 科创板</button>
+      </div>
+      <div id="statusBar" class="status-bar"></div>
+    </section>
+
+    <!-- 股票信息 -->
+    <section id="stockInfo" class="panel stock-info hidden">
+      <div class="si-name">
+        <span id="siName">--</span>
+        <span id="siBoard" class="si-board">--</span>
+        <span id="siCode" class="si-code">--</span>
+      </div>
+      <div class="si-stats">
+        <div class="si-item"><label>最新收盘</label><b id="siClose">--</b></div>
+        <div class="si-item"><label>区间涨跌</label><b id="siChg">--</b></div>
+        <div class="si-item"><label>数据天数</label><b id="siCount">--</b></div>
+        <div class="si-item"><label>日期范围</label><b id="siRange">--</b></div>
+      </div>
+    </section>
+
+    <!-- 最优周期 hero -->
+    <section id="heroCycle" class="panel hero-cycle hidden">
+      <div class="hc-main">
+        <div class="hc-label">🔄 最有规律的套利周期</div>
+        <div class="hc-period"><span id="hcPeriod">--</span> <em>天</em></div>
+        <div class="hc-desc" id="hcDesc">--</div>
+      </div>
+      <div class="hc-side">
+        <div class="hc-box"><label>周期振幅</label><b id="hcAmp">--</b></div>
+        <div class="hc-box"><label>统计显著性</label><b id="hcSig">--</b></div>
+        <div class="hc-box"><label>规律度 R²</label><b id="hcR2">--</b></div>
+        <div class="hc-box"><label>窗口内出现</label><b id="hcCycles">--</b></div>
+      </div>
+      <div class="hc-timing" id="hcTiming">--</div>
+    </section>
+
+    <!-- 图表 -->
+    <section class="charts hidden" id="chartsArea">
+      <div class="panel chart-panel">
+        <h3>① 价格走势与周期拟合</h3>
+        <p class="hint">橙线为「趋势 + 前3个主要周期」的拟合曲线，用于观察周期的规整程度</p>
+        <div id="chartPrice" class="chart"></div>
+      </div>
+      <div class="panel chart-panel">
+        <h3>② 傅里叶频谱（功率谱）</h3>
+        <p class="hint">横轴为周期（天，对数刻度）。高出红噪声显著性红线的峰值即为统计显著的周期</p>
+        <div id="chartSpectrum" class="chart"></div>
+      </div>
+      <div class="panel chart-panel">
+        <h3>③ 去趋势后周期波动分解</h3>
+        <p class="hint">灰色为去趋势后的对数价格波动，彩色为前3个主要周期分量及其叠加</p>
+        <div id="chartCycles" class="chart"></div>
+      </div>
+    </section>
+
+    <!-- 周期排行 -->
+    <section id="tableArea" class="panel hidden">
+      <h3>④ 显著周期排行</h3>
+      <div class="table-scroll">
+        <table id="cycleTable">
+          <thead>
+            <tr>
+              <th>#</th><th>周期(交易日)</th><th>约合</th><th>振幅</th><th>规律度 R²</th>
+              <th>窗口内次数</th><th>显著性</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="disclaimer">
+      ⚠️ 免责声明：本工具仅用于量化研究与教学演示。股票价格历史周期由傅里叶变换统计得出，<strong>不代表未来必然重演</strong>，
+      不构成任何投资建议或“无风险套利”保证。股市有风险，据此操作风险自担。
+    </footer>
+  </div>
+
+  <!-- 优先加载本地打包的 ECharts（不依赖境外 CDN，国内手机可正常显示图表） -->
+  <script src="echarts.min.js"></script>
+  <script>
+    window.echarts || document.write('<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"><\/script>');
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>

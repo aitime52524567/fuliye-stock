@@ -1,0 +1,17 @@
+{
+  "name": "A股周期分析 · 傅里叶套利周期",
+  "short_name": "A股周期",
+  "description": "输入股票代码/中文名/拼音首字母，用傅里叶变换(FFT)找出最有规律的套利周期",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
