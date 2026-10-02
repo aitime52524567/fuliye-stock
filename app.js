@@ -173,43 +173,6 @@ function detectBoard(code) {
   return 'A股';
 }
 
-/* 通用 JSONP 请求：script 标签注入，绕过跨域(CORS)限制。
-   国内浏览器对东方财富接口的 CORS 头支持不稳定，fetch 常报 "Failed to fetch"；
-   改用 JSONP（东方财富接口原生支持 cb 回调）后，任何站点/任何网络都能稳定取数。 */
-function jsonp(url, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const cbName = '__emCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
-    const fullUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'cb=' + cbName;
-    const script = document.createElement('script');
-    let done = false;
-    const cleanup = () => {
-      try { delete window[cbName]; } catch (e) {}
-      if (script.parentNode) script.parentNode.removeChild(script);
-    };
-    window[cbName] = (data) => {
-      if (done) return;
-      done = true;
-      cleanup();
-      resolve(data);
-    };
-    script.onerror = () => {
-      if (done) return;
-      done = true;
-      cleanup();
-      reject(new Error('网络请求失败'));
-    };
-    script.src = fullUrl;
-    document.head.appendChild(script);
-    setTimeout(() => {
-      if (!done) {
-        done = true;
-        cleanup();
-        reject(new Error('请求超时'));
-      }
-    }, timeoutMs || 10000);
-  });
-}
-
 async function fetchKline(code, market, lmt) {
   const secid = market + '.' + code;
   // 将“N 个交易日”换算为日历日（约 1.7 倍）并留 15 天冗余，覆盖节假日/停牌
@@ -222,7 +185,9 @@ async function fetchKline(code, market, lmt) {
     '&fields1=f1,f2,f3,f4,f5,f6' +
     '&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61' +
     '&klt=101&fqt=1&beg=' + beg + '&end=20500101';
-  const json = await jsonp(url, 10000);
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
   if (!json || json.rc !== 0 || !json.data) throw new Error('接口返回异常');
   return json.data;
 }
@@ -285,9 +250,38 @@ async function loadStock(code, marketChoice, lmt) {
 
 /* 搜索接口不支持跨域，改用 JSONP（script 标签注入）绕过 CORS */
 function searchSuggestJSONP(keyword) {
-  const url = 'https://searchapi.eastmoney.com/api/suggest/get?input=' +
-    encodeURIComponent(keyword) + '&type=14&count=8';
-  return jsonp(url, 8000);
+  return new Promise((resolve, reject) => {
+    const cbName = '__emSuggest_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    const url = 'https://searchapi.eastmoney.com/api/suggest/get?input=' +
+      encodeURIComponent(keyword) + '&type=14&count=8&cb=' + cbName;
+    const script = document.createElement('script');
+    let done = false;
+    const cleanup = () => {
+      try { delete window[cbName]; } catch (e) {}
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+    window[cbName] = (data) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve(data);
+    };
+    script.onerror = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      reject(new Error('搜索请求失败'));
+    };
+    script.src = url;
+    document.head.appendChild(script);
+    setTimeout(() => {
+      if (!done) {
+        done = true;
+        cleanup();
+        reject(new Error('搜索超时'));
+      }
+    }, 8000);
+  });
 }
 
 async function searchSuggest(keyword) {
